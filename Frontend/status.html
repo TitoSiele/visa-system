@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Application Status - Immigration Visa System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <h1>🌍 Immigration Visa System</h1>
+            </div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="#" onclick="handleLogout()" class="btn btn-secondary">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Application Status -->
+    <div class="status-container">
+        <div class="container">
+            <a href="dashboard.html" class="back-link">← Back to Dashboard</a>
+
+            <div class="status-card">
+                <div class="status-header">
+                    <h2>Application #<span id="app-id">-</span></h2>
+                    <span id="status-badge" class="status-badge"></span>
+                </div>
+
+                <!-- Status Timeline -->
+                <div class="timeline-section">
+                    <h3>Application Timeline</h3>
+                    <div class="timeline">
+                        <div class="timeline-item completed">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <h4>Submitted</h4>
+                                <p id="submitted-date">-</p>
+                            </div>
+                        </div>
+
+                        <div class="timeline-item" id="review-timeline">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <h4>Under Review</h4>
+                                <p>Your application is being reviewed by our team</p>
+                            </div>
+                        </div>
+
+                        <div class="timeline-item" id="decision-timeline">
+                            <div class="timeline-marker"></div>
+                            <div class="timeline-content">
+                                <h4>Decision</h4>
+                                <p>Waiting for final decision</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Application Details -->
+                <div class="details-section">
+                    <h3>Application Details</h3>
+                    <div class="details-grid">
+                        <div class="detail-item">
+                            <label>Visa Type</label>
+                            <p id="visa-type">-</p>
+                        </div>
+                        <div class="detail-item">
+                            <label>Application ID</label>
+                            <p id="app-id-detail">-</p>
+                        </div>
+                        <div class="detail-item">
+                            <label>Status</label>
+                            <p id="status-detail">-</p>
+                        </div>
+                        <div class="detail-item">
+                            <label>Submitted Date</label>
+                            <p id="submitted-detail">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Documents Section -->
+                <div class="documents-section">
+                    <h3>Uploaded Documents</h3>
+                    <div class="documents-list" id="documents-list">
+                        <p>Loading documents...</p>
+                    </div>
+                </div>
+
+                <!-- Messages Section -->
+                <div class="messages-section">
+                    <h3>Messages & Updates</h3>
+                    <div class="messages-list" id="messages-list">
+                        <p class="no-messages">No messages yet</p>
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="status-actions">
+                    <button class="btn btn-secondary" onclick="downloadStatusPDF()">Download Status Report</button>
+                    <button class="btn btn-secondary" onclick="contactSupport()">Contact Support</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Immigration Visa System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Get application ID from URL
+        function getApplicationId() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('id');
+        }
+
+        // Check authentication
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
+        }
+
+        // Load application status
+        function loadApplicationStatus() {
+            const token = localStorage.getItem('token');
+            const appId = getApplicationId();
+
+            if (!appId) {
+                alert('Invalid application ID');
+                window.location.href = 'dashboard.html';
+                return;
+            }
+
+            fetch(`http://localhost:8000/api/applications/${appId}?token=${encodeURIComponent(token)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load application');
+                }
+                return response.json();
+            })
+            .then(data => {
+                displayApplicationStatus(data);
+                loadApplicationDocuments(appId);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error loading application status');
+            });
+        }
+
+        function displayApplicationStatus(app) {
+            document.getElementById('app-id').textContent = app.id;
+            document.getElementById('app-id-detail').textContent = app.id;
+            document.getElementById('visa-type').textContent = app.visa_type_name || 'Unknown';
+            document.getElementById('status-detail').textContent = app.status;
+            document.getElementById('submitted-detail').textContent = new Date(app.submitted_at).toLocaleDateString();
+            document.getElementById('submitted-date').textContent = new Date(app.submitted_at).toLocaleString();
+
+            // Update status badge and timeline
+            const statusBadge = document.getElementById('status-badge');
+            const reviewTimeline = document.getElementById('review-timeline');
+            const decisionTimeline = document.getElementById('decision-timeline');
+
+            statusBadge.className = `status-badge status-${app.status.toLowerCase()}`;
+            statusBadge.textContent = app.status;
+
+            if (app.status === 'Submitted' || app.status === 'Pending') {
+                reviewTimeline.classList.add('active');
+            } else if (app.status === 'Approved' || app.status === 'Rejected' || app.status === 'More Info') {
+                reviewTimeline.classList.add('completed');
+                decisionTimeline.classList.add('completed');
+            }
+        }
+
+        function loadApplicationDocuments(appId) {
+            const token = localStorage.getItem('token');
+
+            fetch(`http://localhost:8000/api/applications/${appId}/documents?token=${encodeURIComponent(token)}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load documents');
+                }
+                return response.json();
+            })
+            .then(documents => {
+                displayDocuments(documents);
+            })
+            .catch(error => {
+                console.error('Error loading documents:', error);
+                document.getElementById('documents-list').innerHTML = '<p>Error loading documents</p>';
+            });
+        }
+
+        function displayDocuments(documents) {
+            const list = document.getElementById('documents-list');
+            
+            if (!documents || documents.length === 0) {
+                list.innerHTML = '<p>No documents uploaded</p>';
+                return;
+            }
+
+            list.innerHTML = documents.map(doc => `
+                <div class="document-item">
+                    <div class="doc-info">
+                        <h4>${doc.document_type}</h4>
+                        <p><small>Status: ${doc.verified ? '✓ Verified' : 'Pending Verification'}</small></p>
+                    </div>
+                    <div class="doc-actions">
+                        <a href="${doc.file_path}" target="_blank" class="btn btn-small">Download</a>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function downloadStatusPDF() {
+            alert('Status report download feature coming soon!');
+        }
+
+        function contactSupport() {
+            alert('Support contact: support@immigrationvisa.gov');
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = 'login.html';
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            checkAuth();
+            loadApplicationStatus();
+            
+            // Auto-refresh every 1 minute
+            setInterval(loadApplicationStatus, 60000);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Immigration Visa System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <h1>🌍 Immigration Visa System</h1>
+            </div>
+            <ul class="navbar-menu">
+                <li id="user-name">Welcome, User</li>
+                <li><a href="apply.html" class="btn btn-primary">New Application</a></li>
+                <li><a href="#" onclick="handleLogout()" class="btn btn-secondary">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Dashboard Content -->
+    <div class="dashboard-container">
+        <div class="container">
+            <h2>Your Applications</h2>
+            
+            <!-- Quick Stats -->
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h3>Total Applications</h3>
+                    <p class="stat-number" id="total-apps">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Pending</h3>
+                    <p class="stat-number pending" id="pending-apps">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Approved</h3>
+                    <p class="stat-number approved" id="approved-apps">0</p>
+                </div>
+                <div class="stat-card">
+                    <h3>Rejected</h3>
+                    <p class="stat-number rejected" id="rejected-apps">0</p>
+                </div>
+            </div>
+
+            <!-- Applications Table -->
+            <div class="applications-section">
+                <div class="section-header">
+                    <h3>Your Visa Applications</h3>
+                    <a href="apply.html" class="btn btn-primary">Start New Application</a>
+                </div>
+
+                <table class="applications-table">
+                    <thead>
+                        <tr>
+                            <th>Application ID</th>
+                            <th>Visa Type</th>
+                            <th>Status</th>
+                            <th>Submitted Date</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="applications-body">
+                        <tr>
+                            <td colspan="5" class="text-center">Loading applications...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Immigration Visa System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Check authentication
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
+        }
+
+        // Load user data
+        function loadUserData() {
+            const user = JSON.parse(localStorage.getItem('user') || '{}');
+            document.getElementById('user-name').textContent = `Welcome, ${user.full_name || 'User'}`;
+        }
+
+        // Load applications
+        function loadApplications() {
+            const token = localStorage.getItem('token');
+            
+            fetch('http://localhost:8000/api/applications?token=' + encodeURIComponent(token), {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Failed to load applications');
+                }
+                return response.json();
+            })
+            .then(data => {
+                displayApplications(data.applications || []);
+                updateStats(data.applications || []);
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('applications-body').innerHTML = 
+                    '<tr><td colspan="5" class="text-center">Error loading applications</td></tr>';
+            });
+        }
+
+        function displayApplications(applications) {
+            const tbody = document.getElementById('applications-body');
+            
+            if (applications.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No applications yet. <a href="apply.html">Start one now</a></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = applications.map(app => `
+                <tr>
+                    <td>#${app.id}</td>
+                    <td>${app.visa_type_name || 'Unknown'}</td>
+                    <td><span class="status-badge status-${app.status.toLowerCase()}">${app.status}</span></td>
+                    <td>${new Date(app.submitted_at).toLocaleDateString()}</td>
+                    <td>
+                        <a href="status.html?id=${app.id}" class="btn btn-small">View</a>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function updateStats(applications) {
+            const total = applications.length;
+            const pending = applications.filter(a => a.status === 'Pending').length;
+            const approved = applications.filter(a => a.status === 'Approved').length;
+            const rejected = applications.filter(a => a.status === 'Rejected').length;
+
+            document.getElementById('total-apps').textContent = total;
+            document.getElementById('pending-apps').textContent = pending;
+            document.getElementById('approved-apps').textContent = approved;
+            document.getElementById('rejected-apps').textContent = rejected;
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = 'login.html';
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            checkAuth();
+            loadUserData();
+            loadApplications();
+        });
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadApplications, 30000);
+    </script>
+</body>
+</html>

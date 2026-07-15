@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>New Application - Immigration Visa System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <h1>🌍 Immigration Visa System</h1>
+            </div>
+            <ul class="navbar-menu">
+                <li><a href="dashboard.html">Dashboard</a></li>
+                <li><a href="#" onclick="handleLogout()" class="btn btn-secondary">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Application Form -->
+    <div class="form-container">
+        <div class="container">
+            <div class="form-wrapper">
+                <h2>Create New Visa Application</h2>
+                <form id="application-form" onsubmit="handleApplicationSubmit(event)">
+                    
+                    <!-- Step 1: Select Visa Type -->
+                    <div class="form-section">
+                        <h3>Step 1: Select Visa Type</h3>
+                        <p class="form-help">Choose the type of visa you are applying for</p>
+                        
+                        <div class="form-group">
+                            <label for="visa-type">Visa Type *</label>
+                            <select id="visa-type" name="visa_type_id" required onchange="loadVisaRequirements()">
+                                <option value="">-- Select Visa Type --</option>
+                                <option value="1">Student Visa</option>
+                                <option value="2">Work Visa</option>
+                                <option value="3">Family Visa</option>
+                                <option value="4">Business Visa</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Step 2: Visa Requirements -->
+                    <div class="form-section" id="requirements-section" style="display: none;">
+                        <h3>Step 2: Required Documents</h3>
+                        <p class="form-help">Please check all required documents you will upload</p>
+                        
+                        <div id="requirements-list" class="document-list">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <!-- Step 3: Document Upload -->
+                    <div class="form-section" id="upload-section" style="display: none;">
+                        <h3>Step 3: Upload Documents</h3>
+                        <p class="form-help">Upload supporting documents for your application</p>
+                        
+                        <div id="upload-fields" class="upload-fields">
+                            <!-- Dynamically populated -->
+                        </div>
+                    </div>
+
+                    <!-- Step 4: Review & Submit -->
+                    <div class="form-section">
+                        <h3>Step 4: Review & Submit</h3>
+                        <div class="checkbox-group">
+                            <label>
+                                <input type="checkbox" name="terms" required>
+                                I confirm that all information provided is accurate and true
+                            </label>
+                            <label>
+                                <input type="checkbox" name="privacy" required>
+                                I agree to the Privacy Policy and Terms of Service
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- Form Actions -->
+                    <div class="form-actions">
+                        <a href="dashboard.html" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Submit Application</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Immigration Visa System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        // Visa type requirements
+        const visaRequirements = {
+            1: { name: 'Student Visa', documents: ['Passport', 'Academic Transcript', 'Bank Statement', 'Admission Letter'] },
+            2: { name: 'Work Visa', documents: ['Passport', 'Job Offer Letter', 'Professional Certificate', 'Background Check'] },
+            3: { name: 'Family Visa', documents: ['Passport', 'Relationship Certificate', 'Financial Support Document', 'Birth Certificate'] },
+            4: { name: 'Business Visa', documents: ['Passport', 'Business License', 'Company Registration', 'Travel Itinerary'] }
+        };
+
+        // Check authentication
+        function checkAuth() {
+            const token = localStorage.getItem('token');
+            if (!token) {
+                window.location.href = 'login.html';
+                return;
+            }
+        }
+
+        // Load visa requirements
+        function loadVisaRequirements() {
+            const visaTypeId = document.getElementById('visa-type').value;
+            if (!visaTypeId) {
+                document.getElementById('requirements-section').style.display = 'none';
+                document.getElementById('upload-section').style.display = 'none';
+                return;
+            }
+
+            const requirements = visaRequirements[visaTypeId];
+            document.getElementById('requirements-section').style.display = 'block';
+            document.getElementById('upload-section').style.display = 'block';
+
+            // Populate requirements checklist
+            const requirementsList = document.getElementById('requirements-list');
+            requirementsList.innerHTML = requirements.documents.map(doc => `
+                <label class="checkbox-item">
+                    <input type="checkbox" class="doc-requirement" value="${doc}" checked disabled>
+                    <span>${doc}</span>
+                </label>
+            `).join('');
+
+            // Populate upload fields
+            const uploadFields = document.getElementById('upload-fields');
+            uploadFields.innerHTML = requirements.documents.map((doc, idx) => `
+                <div class="form-group">
+                    <label for="doc-${idx}">${doc} *</label>
+                    <input type="file" id="doc-${idx}" name="document_${idx}" required accept=".pdf,.doc,.docx,.jpg,.png">
+                    <small>Supported: PDF, DOC, DOCX, JPG, PNG (Max 5MB)</small>
+                </div>
+            `).join('');
+        }
+
+        function handleApplicationSubmit(event) {
+            event.preventDefault();
+            
+            const token = localStorage.getItem('token');
+            const visaTypeId = document.getElementById('visa-type').value;
+
+            if (!visaTypeId) {
+                alert('Please select a visa type');
+                return;
+            }
+
+            // Create FormData for file upload
+            const formData = new FormData();
+            formData.append('visa_type_id', visaTypeId);
+
+            // Append uploaded files
+            const uploadFields = document.getElementById('upload-fields');
+            const fileInputs = uploadFields.querySelectorAll('input[type="file"]');
+            
+            fileInputs.forEach((input, idx) => {
+                if (input.files.length > 0) {
+                    formData.append(`document_${idx}`, input.files[0]);
+                }
+            });
+
+            // Submit application
+            fetch(`http://localhost:8000/api/applications?token=${encodeURIComponent(token)}&visa_type_id=${visaTypeId}`, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(data => {
+                        throw new Error(data.detail || 'Error submitting application');
+                    });
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.id) {
+                    alert('Application submitted successfully!');
+                    window.location.href = 'dashboard.html';
+                } else {
+                    alert('Error submitting application: ' + (data.detail || 'Unknown error'));
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Error submitting application: ' + error.message);
+            });
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = 'login.html';
+        }
+
+        // Initialize on page load
+        window.addEventListener('load', () => {
+            checkAuth();
+        });
+    </script>
+</body>
+</html>
