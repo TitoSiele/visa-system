@@ -36,10 +36,6 @@
                             <label for="visa-type">Visa Type *</label>
                             <select id="visa-type" name="visa_type_id" required onchange="loadVisaRequirements()">
                                 <option value="">-- Select Visa Type --</option>
-                                <option value="1">Student Visa</option>
-                                <option value="2">Work Visa</option>
-                                <option value="3">Family Visa</option>
-                                <option value="4">Business Visa</option>
                             </select>
                         </div>
                     </div>
@@ -97,13 +93,20 @@
     </footer>
 
     <script>
-        // Visa type requirements
-        const visaRequirements = {
-            1: { name: 'Student Visa', documents: ['Passport', 'Academic Transcript', 'Bank Statement', 'Admission Letter'] },
-            2: { name: 'Work Visa', documents: ['Passport', 'Job Offer Letter', 'Professional Certificate', 'Background Check'] },
-            3: { name: 'Family Visa', documents: ['Passport', 'Relationship Certificate', 'Financial Support Document', 'Birth Certificate'] },
-            4: { name: 'Business Visa', documents: ['Passport', 'Business License', 'Company Registration', 'Travel Itinerary'] }
-        };
+        let visaTypesData = {};
+
+        async function fetchVisaTypes() {
+            const response = await fetch('http://localhost:8000/api/visa-types');
+            const data = await response.json();
+            const select = document.getElementById('visa-type');
+            data.forEach(vt => {
+                visaTypesData[vt.id] = vt;
+                const option = document.createElement('option');
+                option.value = vt.id;
+                option.textContent = vt.name;
+                select.appendChild(option);
+            });
+        }
 
         // Check authentication
         function checkAuth() {
@@ -123,13 +126,13 @@
                 return;
             }
 
-            const requirements = visaRequirements[visaTypeId];
+            const requirements = visaTypesData[visaTypeId].required_documents;
             document.getElementById('requirements-section').style.display = 'block';
             document.getElementById('upload-section').style.display = 'block';
 
             // Populate requirements checklist
             const requirementsList = document.getElementById('requirements-list');
-            requirementsList.innerHTML = requirements.documents.map(doc => `
+            requirementsList.innerHTML = requirements.map(doc => `
                 <label class="checkbox-item">
                     <input type="checkbox" class="doc-requirement" value="${doc}" checked disabled>
                     <span>${doc}</span>
@@ -138,7 +141,7 @@
 
             // Populate upload fields
             const uploadFields = document.getElementById('upload-fields');
-            uploadFields.innerHTML = requirements.documents.map((doc, idx) => `
+            uploadFields.innerHTML = requirements.map((doc, idx) => `
                 <div class="form-group">
                     <label for="doc-${idx}">${doc} *</label>
                     <input type="file" id="doc-${idx}" name="document_${idx}" required accept=".pdf,.doc,.docx,.jpg,.png">
@@ -147,9 +150,9 @@
             `).join('');
         }
 
-        function handleApplicationSubmit(event) {
+        async function handleApplicationSubmit(event) {
             event.preventDefault();
-            
+
             const token = localStorage.getItem('token');
             const visaTypeId = document.getElementById('visa-type').value;
 
@@ -158,45 +161,38 @@
                 return;
             }
 
-            // Create FormData for file upload
-            const formData = new FormData();
-            formData.append('visa_type_id', visaTypeId);
+            try {
+                const appResponse = await fetch(`http://localhost:8000/api/applications?token=${encodeURIComponent(token)}&visa_type_id=${visaTypeId}`, {
+                    method: 'POST'
+                });
+                if (!appResponse.ok) {
+                    const errData = await appResponse.json();
+                    throw new Error(errData.detail || 'Error creating application');
+                }
+                const appData = await appResponse.json();
 
-            // Append uploaded files
-            const uploadFields = document.getElementById('upload-fields');
-            const fileInputs = uploadFields.querySelectorAll('input[type="file"]');
-            
-            fileInputs.forEach((input, idx) => {
-                if (input.files.length > 0) {
-                    formData.append(`document_${idx}`, input.files[0]);
-                }
-            });
+                const uploadFields = document.getElementById('upload-fields');
+                const fileInputs = uploadFields.querySelectorAll('input[type="file"]');
+                const requirements = visaTypesData[visaTypeId].required_documents;
 
-            // Submit application
-            fetch(`http://localhost:8000/api/applications?token=${encodeURIComponent(token)}&visa_type_id=${visaTypeId}`, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => {
-                if (!response.ok) {
-                    return response.json().then(data => {
-                        throw new Error(data.detail || 'Error submitting application');
-                    });
+                for (let idx = 0; idx < fileInputs.length; idx++) {
+                    const input = fileInputs[idx];
+                    if (input.files.length > 0) {
+                        const docFormData = new FormData();
+                        docFormData.append('file', input.files[0]);
+                        await fetch(`http://localhost:8000/api/applications/${appData.id}/documents?token=${encodeURIComponent(token)}&document_type=${encodeURIComponent(requirements[idx])}`, {
+                            method: 'POST',
+                            body: docFormData
+                        });
+                    }
                 }
-                return response.json();
-            })
-            .then(data => {
-                if (data.id) {
-                    alert('Application submitted successfully!');
-                    window.location.href = 'dashboard.html';
-                } else {
-                    alert('Error submitting application: ' + (data.detail || 'Unknown error'));
-                }
-            })
-            .catch(error => {
+
+                alert('Application submitted successfully!');
+                window.location.href = 'dashboard.html';
+            } catch (error) {
                 console.error('Error:', error);
                 alert('Error submitting application: ' + error.message);
-            });
+            }
         }
 
         function handleLogout() {
@@ -208,6 +204,7 @@
         // Initialize on page load
         window.addEventListener('load', () => {
             checkAuth();
+            fetchVisaTypes();
         });
     </script>
 </body>

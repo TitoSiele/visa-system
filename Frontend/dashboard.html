@@ -108,7 +108,9 @@
             })
             .then(response => {
                 if (!response.ok) {
-                    throw new Error('Failed to load applications');
+                    return response.json().then(errData => {
+                        throw new Error(errData.detail || `Failed to load applications (status ${response.status})`);
+                    });
                 }
                 return response.json();
             })
@@ -117,9 +119,9 @@
                 updateStats(data.applications || []);
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Error loading applications:', error);
                 document.getElementById('applications-body').innerHTML = 
-                    '<tr><td colspan="5" class="text-center">Error loading applications</td></tr>';
+                    `<tr><td colspan="5" class="text-center">Error loading applications: ${error.message}</td></tr>`;
             });
         }
 
@@ -136,7 +138,7 @@
                     <td>#${app.id}</td>
                     <td>${app.visa_type_name || 'Unknown'}</td>
                     <td><span class="status-badge status-${app.status.toLowerCase()}">${app.status}</span></td>
-                    <td>${new Date(app.submitted_at).toLocaleDateString()}</td>
+                    <td>${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'N/A'}</td>
                     <td>
                         <a href="status.html?id=${app.id}" class="btn btn-small">View</a>
                     </td>
@@ -146,7 +148,7 @@
 
         function updateStats(applications) {
             const total = applications.length;
-            const pending = applications.filter(a => a.status === 'Pending').length;
+            const pending = applications.filter(a => a.status === 'Submitted' || a.status === 'Pending').length;
             const approved = applications.filter(a => a.status === 'Approved').length;
             const rejected = applications.filter(a => a.status === 'Rejected').length;
 
