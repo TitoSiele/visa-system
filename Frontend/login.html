@@ -52,6 +52,30 @@
                         <label for="register-email">Email Address</label>
                         <input type="email" id="register-email" name="email" required placeholder="your@email.com">
                     </div>
+
+                    <!-- NEW: Personal Details -->
+                    <div class="form-group">
+                        <label for="register-country">Country of Origin</label>
+                        <input type="text" id="register-country" name="country_of_origin" placeholder="e.g. Kenya">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-dob">Date of Birth</label>
+                        <input type="date" id="register-dob" name="date_of_birth">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-passport">Passport Number</label>
+                        <input type="text" id="register-passport" name="passport_number" placeholder="e.g. A12345678">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-phone">Phone Number</label>
+                        <input type="tel" id="register-phone" name="phone_number" placeholder="e.g. +254712345678">
+                    </div>
+                    <div class="form-group">
+                        <label for="register-address">Address</label>
+                        <input type="text" id="register-address" name="address" placeholder="Street, City, Postal Code">
+                    </div>
+                    <!-- END NEW -->
+
                     <div class="form-group">
                         <label for="register-password">Password</label>
                         <input type="password" id="register-password" name="password" required placeholder="Choose a strong password">
@@ -77,7 +101,7 @@
     <script>
         function toggleForms() {
             const loginForm = document.getElementById('login-form');
-            const registerForm = document.getElementById('register-form');
+            const registerForm = document.querySelector('#register-form form').reset();
             loginForm.classList.toggle('active');
             registerForm.classList.toggle('active');
         }
@@ -87,7 +111,6 @@
             const email = document.getElementById('login-email').value;
             const password = document.getElementById('login-password').value;
             
-            // Call backend API
             fetch('http://127.0.0.1:8000/api/login', {
                 method: 'POST',
                 headers: {
@@ -118,18 +141,33 @@
             const password = document.getElementById('register-password').value;
             const confirmPassword = document.getElementById('register-confirm').value;
 
+            // NEW: read personal details fields
+            const countryOfOrigin = document.getElementById('register-country').value;
+            const dateOfBirth = document.getElementById('register-dob').value;
+            const passportNumber = document.getElementById('register-passport').value;
+            const phoneNumber = document.getElementById('register-phone').value;
+            const address = document.getElementById('register-address').value;
+
             if (password !== confirmPassword) {
                 alert('Passwords do not match!');
                 return;
             }
 
-            // Call backend API
             fetch('http://127.0.0.1:8000/api/register', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ full_name: name, email, password })
+                body: JSON.stringify({
+                    full_name: name,
+                    email,
+                    password,
+                    country_of_origin: countryOfOrigin,
+                    date_of_birth: dateOfBirth,
+                    passport_number: passportNumber,
+                    phone_number: phoneNumber,
+                    address: address
+                })
             })
             .then(response => {
                 if (!response.ok) {

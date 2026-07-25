@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Officer Dashboard - Immigration Visa System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="navbar-brand">
+                <h1>🌍 Immigration Visa System — Officer Panel</h1>
+            </div>
+            <ul class="navbar-menu">
+                <li><a href="#" onclick="handleLogout()" class="btn btn-secondary">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <div class="form-container">
+        <div class="container">
+
+            <!-- Filter Bar -->
+            <div class="form-wrapper" style="margin-bottom: 20px;">
+                <h2>All Applications</h2>
+                <div class="form-group">
+                    <label for="status-filter">Filter by Status</label>
+                    <select id="status-filter" onchange="loadApplications()">
+                        <option value="">All</option>
+                        <option value="Submitted">Submitted</option>
+                        <option value="Pending">Pending</option>
+                        <option value="More Info">More Info</option>
+                        <option value="Approved">Approved</option>
+                        <option value="Rejected">Rejected</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Applications List -->
+            <div id="applications-list"></div>
+
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Immigration Visa System. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
+        function authHeaders(extra = {}) {
+            return { 'Authorization': `Bearer ${getToken()}`, ...extra };
+        }
+
+        function checkOfficerAuth() {
+            const token = getToken();
+            const userStr = localStorage.getItem('user');
+            if (!token || !userStr) {
+                window.location.href = 'login.html';
+                return;
+            }
+            const user = JSON.parse(userStr);
+            if (user.role !== 'officer' && user.role !== 'admin') {
+                alert('Access denied. Officer/Admin access only.');
+                window.location.href = 'dashboard.html';
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = 'login.html';
+        }
+
+        async function loadApplications() {
+            const status = document.getElementById('status-filter').value;
+            const url = status
+                ? `${API_BASE}/api/admin/applications?status=${encodeURIComponent(status)}`
+                : `${API_BASE}/api/admin/applications`;
+
+            const response = await fetch(url, { headers: authHeaders() });
+            if (response.status === 401) {
+                handleLogout();
+                return;
+            }
+            if (!response.ok) {
+                alert('Failed to load applications');
+                return;
+            }
+            const applications = await response.json();
+            renderApplications(applications);
+        }
+
+        function renderApplications(applications) {
+            const container = document.getElementById('applications-list');
+
+            if (applications.length === 0) {
+                container.innerHTML = '<div class="form-wrapper"><p>No applications found.</p></div>';
+                return;
+            }
+
+            container.innerHTML = applications.map(app => `
+                <div class="form-wrapper" style="margin-bottom: 16px;" id="app-card-${app.id}">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap;">
+                        <div>
+                            <h3>${app.applicant_name} — ${app.visa_type_name}</h3>
+                            <p>Email: ${app.applicant_email}</p>
+                            <p>Submitted: ${app.submitted_at ? new Date(app.submitted_at).toLocaleString() : 'N/A'}</p>
+                            <p>Status: <strong>${app.status}</strong></p>
+                        </div>
+                        <div>
+                            <button class="btn btn-secondary" onclick="toggleDocuments(${app.id})">View Documents</button>
+                        </div>
+                    </div>
+
+                    <div id="docs-${app.id}" style="display:none; margin-top: 16px;">
+                        <div id="docs-list-${app.id}">Loading documents...</div>
+
+                        <div class="form-group" style="margin-top: 16px;">
+                            <label for="status-select-${app.id}">Update Application Status</label>
+                            <select id="status-select-${app.id}">
+                                <option value="Submitted" ${app.status === 'Submitted' ? 'selected' : ''}>Submitted</option>
+                                <option value="Pending" ${app.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                <option value="More Info" ${app.status === 'More Info' ? 'selected' : ''}>More Info</option>
+                                <option value="Approved" ${app.status === 'Approved' ? 'selected' : ''}>Approved</option>
+                                <option value="Rejected" ${app.status === 'Rejected' ? 'selected' : ''}>Rejected</option>
+                            </select>
+                            <button class="btn btn-primary" style="margin-top:8px;" onclick="updateApplicationStatus(${app.id})">Save Status</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function toggleDocuments(appId) {
+            const docsDiv = document.getElementById(`docs-${appId}`);
+            const isHidden = docsDiv.style.display === 'none';
+            docsDiv.style.display = isHidden ? 'block' : 'none';
+
+            if (isHidden) {
+                await loadDocuments(appId);
+            }
+        }
+
+        async function loadDocuments(appId) {
+            const response = await fetch(`${API_BASE}/api/admin/applications/${appId}/documents`, {
+                headers: authHeaders()
+            });
+            const listDiv = document.getElementById(`docs-list-${appId}`);
+
+            if (response.status === 401) {
+                handleLogout();
+                return;
+            }
+            if (!response.ok) {
+                listDiv.innerHTML = '<p>Failed to load documents.</p>';
+                return;
+            }
+
+            const documents = await response.json();
+
+            if (documents.length === 0) {
+                listDiv.innerHTML = '<p>No documents uploaded yet.</p>';
+                return;
+            }
+
+            // doc.file_path is no longer sent by the API (documents are only
+            // reachable through the authenticated /api/documents/{id}/file
+            // route now), so "View File" fetches it with the auth header and
+            // opens it as a blob instead of linking straight to a static path.
+            listDiv.innerHTML = documents.map(doc => `
+                <div class="document-list-item" style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid #ddd;">
+                    <div>
+                        <strong>${doc.document_type}</strong>
+                        <span style="margin-left:10px; color:${doc.verified ? 'green' : 'orange'};">
+                            ${doc.verified ? '✅ Verified' : '⏳ Not Verified'}
+                        </span>
+                    </div>
+                    <div>
+                        <button class="btn btn-secondary" style="margin-right:8px;" onclick="viewDocument(${doc.id})">View File</button>
+                        <button class="btn btn-primary" onclick="verifyDocument(${doc.id}, true, ${appId})">Approve</button>
+                        <button class="btn btn-secondary" onclick="verifyDocument(${doc.id}, false, ${appId})">Reject</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async function viewDocument(docId) {
+            try {
+                const response = await fetch(`${API_BASE}/api/documents/${docId}/file`, {
+                    headers: authHeaders()
+                });
+                if (response.status === 401) {
+                    handleLogout();
+                    return;
+                }
+                if (!response.ok) {
+                    alert('Failed to load document');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+                // Release the blob URL once the browser has had a chance to load it.
+                setTimeout(() => URL.revokeObjectURL(url), 60000);
+            } catch (error) {
+                console.error('Error viewing document:', error);
+                alert('Failed to load document');
+            }
+        }
+
+        async function verifyDocument(docId, verified, appId) {
+            const response = await fetch(`${API_BASE}/api/admin/documents/${docId}/verify`, {
+                method: 'PATCH',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ verified })
+            });
+
+            if (response.status === 401) {
+                handleLogout();
+                return;
+            }
+            if (!response.ok) {
+                alert('Failed to update document');
+                return;
+            }
+
+            await loadDocuments(appId);
+        }
+
+        async function updateApplicationStatus(appId) {
+            const newStatus = document.getElementById(`status-select-${appId}`).value;
+
+            const response = await fetch(`${API_BASE}/api/admin/applications/${appId}/status`, {
+                method: 'PATCH',
+                headers: authHeaders({ 'Content-Type': 'application/json' }),
+                body: JSON.stringify({ status: newStatus })
+            });
+
+            if (response.status === 401) {
+                handleLogout();
+                return;
+            }
+            if (!response.ok) {
+                alert('Failed to update status');
+                return;
+            }
+
+            alert('Application status updated to ' + newStatus);
+            loadApplications();
+        }
+
+        window.addEventListener('load', () => {
+            checkOfficerAuth();
+            loadApplications();
+        });
+    </script>
+</body>
+</html>

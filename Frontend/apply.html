@@ -26,12 +26,12 @@
             <div class="form-wrapper">
                 <h2>Create New Visa Application</h2>
                 <form id="application-form" onsubmit="handleApplicationSubmit(event)">
-                    
+
                     <!-- Step 1: Select Visa Type -->
                     <div class="form-section">
                         <h3>Step 1: Select Visa Type</h3>
                         <p class="form-help">Choose the type of visa you are applying for</p>
-                        
+
                         <div class="form-group">
                             <label for="visa-type">Visa Type *</label>
                             <select id="visa-type" name="visa_type_id" required onchange="loadVisaRequirements()">
@@ -44,7 +44,7 @@
                     <div class="form-section" id="requirements-section" style="display: none;">
                         <h3>Step 2: Required Documents</h3>
                         <p class="form-help">Please check all required documents you will upload</p>
-                        
+
                         <div id="requirements-list" class="document-list">
                             <!-- Dynamically populated -->
                         </div>
@@ -54,7 +54,7 @@
                     <div class="form-section" id="upload-section" style="display: none;">
                         <h3>Step 3: Upload Documents</h3>
                         <p class="form-help">Upload supporting documents for your application</p>
-                        
+
                         <div id="upload-fields" class="upload-fields">
                             <!-- Dynamically populated -->
                         </div>
@@ -78,7 +78,7 @@
                     <!-- Form Actions -->
                     <div class="form-actions">
                         <a href="dashboard.html" class="btn btn-secondary">Cancel</a>
-                        <button type="submit" class="btn btn-primary">Submit Application</button>
+                        <button type="submit" class="btn btn-primary" id="submit-btn">Submit Application</button>
                     </div>
                 </form>
             </div>
@@ -93,10 +93,19 @@
     </footer>
 
     <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+        // Must match the backend's ALLOWED_UPLOAD_EXTENSIONS / MAX_UPLOAD_BYTES in main.py
+        const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
+        const MAX_UPLOAD_BYTES = 10 * 1024 * 1024; // 10 MB
+
         let visaTypesData = {};
 
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
         async function fetchVisaTypes() {
-            const response = await fetch('http://localhost:8000/api/visa-types');
+            const response = await fetch(`${API_BASE}/api/visa-types`);
             const data = await response.json();
             const select = document.getElementById('visa-type');
             data.forEach(vt => {
@@ -110,7 +119,7 @@
 
         // Check authentication
         function checkAuth() {
-            const token = localStorage.getItem('token');
+            const token = getToken();
             if (!token) {
                 window.location.href = 'login.html';
                 return;
@@ -140,20 +149,39 @@
             `).join('');
 
             // Populate upload fields
+            // NOTE: accept is now limited to pdf/jpg/jpeg/png because that's all
+            // the backend will store (see ALLOWED_UPLOAD_EXTENSIONS in main.py).
             const uploadFields = document.getElementById('upload-fields');
             uploadFields.innerHTML = requirements.map((doc, idx) => `
                 <div class="form-group">
                     <label for="doc-${idx}">${doc} *</label>
-                    <input type="file" id="doc-${idx}" name="document_${idx}" required accept=".pdf,.doc,.docx,.jpg,.png">
-                    <small>Supported: PDF, DOC, DOCX, JPG, PNG (Max 5MB)</small>
+                    <input type="file" id="doc-${idx}" name="document_${idx}" required accept=".pdf,.jpg,.jpeg,.png">
+                    <small>Supported: PDF, JPG, PNG (Max 10MB)</small>
                 </div>
             `).join('');
+        }
+
+        function validateFiles(fileInputs) {
+            for (const input of fileInputs) {
+                const file = input.files[0];
+                if (!file) continue;
+                const ext = '.' + file.name.split('.').pop().toLowerCase();
+                if (!ALLOWED_EXTENSIONS.includes(ext)) {
+                    alert(`"${file.name}" is not a supported file type. Please upload PDF, JPG, or PNG files.`);
+                    return false;
+                }
+                if (file.size > MAX_UPLOAD_BYTES) {
+                    alert(`"${file.name}" is larger than 10MB. Please choose a smaller file.`);
+                    return false;
+                }
+            }
+            return true;
         }
 
         async function handleApplicationSubmit(event) {
             event.preventDefault();
 
-            const token = localStorage.getItem('token');
+            const token = getToken();
             const visaTypeId = document.getElementById('visa-type').value;
 
             if (!visaTypeId) {
@@ -161,18 +189,36 @@
                 return;
             }
 
+            const uploadFields = document.getElementById('upload-fields');
+            const fileInputs = Array.from(uploadFields.querySelectorAll('input[type="file"]'));
+
+            if (!validateFiles(fileInputs)) {
+                return;
+            }
+
+            const submitBtn = document.getElementById('submit-btn');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting...';
+
             try {
-                const appResponse = await fetch(`http://localhost:8000/api/applications?token=${encodeURIComponent(token)}&visa_type_id=${visaTypeId}`, {
-                    method: 'POST'
+                // Token now goes in the Authorization header; visa_type_id stays
+                // as a query param since it isn't sensitive.
+                const appResponse = await fetch(`${API_BASE}/api/applications?visa_type_id=${visaTypeId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
                 });
+                if (appResponse.status === 401) {
+                    handleLogout();
+                    return;
+                }
                 if (!appResponse.ok) {
                     const errData = await appResponse.json();
                     throw new Error(errData.detail || 'Error creating application');
                 }
                 const appData = await appResponse.json();
 
-                const uploadFields = document.getElementById('upload-fields');
-                const fileInputs = uploadFields.querySelectorAll('input[type="file"]');
                 const requirements = visaTypesData[visaTypeId].required_documents;
 
                 for (let idx = 0; idx < fileInputs.length; idx++) {
@@ -180,10 +226,20 @@
                     if (input.files.length > 0) {
                         const docFormData = new FormData();
                         docFormData.append('file', input.files[0]);
-                        await fetch(`http://localhost:8000/api/applications/${appData.id}/documents?token=${encodeURIComponent(token)}&document_type=${encodeURIComponent(requirements[idx])}`, {
-                            method: 'POST',
-                            body: docFormData
-                        });
+                        const uploadResponse = await fetch(
+                            `${API_BASE}/api/applications/${appData.id}/documents?document_type=${encodeURIComponent(requirements[idx])}`,
+                            {
+                                method: 'POST',
+                                headers: {
+                                    'Authorization': `Bearer ${token}`
+                                },
+                                body: docFormData
+                            }
+                        );
+                        if (!uploadResponse.ok) {
+                            const errData = await uploadResponse.json().catch(() => ({}));
+                            throw new Error(errData.detail || `Failed to upload "${requirements[idx]}"`);
+                        }
                     }
                 }
 
@@ -192,6 +248,9 @@
             } catch (error) {
                 console.error('Error:', error);
                 alert('Error submitting application: ' + error.message);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Application';
             }
         }
 

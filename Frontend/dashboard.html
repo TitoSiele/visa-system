@@ -13,7 +13,7 @@
             <div class="navbar-brand">
                 <h1>🌍 Immigration Visa System</h1>
             </div>
-            <ul class="navbar-menu">
+            <ul class="navbar-menu" id="navbar-menu">
                 <li id="user-name">Welcome, User</li>
                 <li><a href="apply.html" class="btn btn-primary">New Application</a></li>
                 <li><a href="#" onclick="handleLogout()" class="btn btn-secondary">Logout</a></li>
@@ -25,7 +25,7 @@
     <div class="dashboard-container">
         <div class="container">
             <h2>Your Applications</h2>
-            
+
             <!-- Quick Stats -->
             <div class="stats-grid">
                 <div class="stat-card">
@@ -81,9 +81,15 @@
     </footer>
 
     <script>
+        const API_BASE = 'http://127.0.0.1:8000';
+
+        function getToken() {
+            return localStorage.getItem('token');
+        }
+
         // Check authentication
         function checkAuth() {
-            const token = localStorage.getItem('token');
+            const token = getToken();
             if (!token) {
                 window.location.href = 'login.html';
                 return;
@@ -94,19 +100,34 @@
         function loadUserData() {
             const user = JSON.parse(localStorage.getItem('user') || '{}');
             document.getElementById('user-name').textContent = `Welcome, ${user.full_name || 'User'}`;
+
+            // Show Admin Panel link only for officer/admin roles
+            if (user.role === 'officer' || user.role === 'admin') {
+                const navMenu = document.getElementById('navbar-menu');
+                const adminItem = document.createElement('li');
+                adminItem.innerHTML = '<a href="admin.html" class="btn btn-primary">Admin Panel</a>';
+                navMenu.insertBefore(adminItem, navMenu.firstChild.nextSibling);
+            }
         }
 
         // Load applications
         function loadApplications() {
-            const token = localStorage.getItem('token');
-            
-            fetch('http://localhost:8000/api/applications?token=' + encodeURIComponent(token), {
+            const token = getToken();
+
+            // Token now goes in the Authorization header instead of the URL
+            // (query-string tokens end up in browser history and server logs).
+            fetch(`${API_BASE}/api/applications`, {
                 method: 'GET',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
                 }
             })
             .then(response => {
+                if (response.status === 401) {
+                    handleLogout();
+                    throw new Error('Session expired. Please log in again.');
+                }
                 if (!response.ok) {
                     return response.json().then(errData => {
                         throw new Error(errData.detail || `Failed to load applications (status ${response.status})`);
@@ -120,14 +141,14 @@
             })
             .catch(error => {
                 console.error('Error loading applications:', error);
-                document.getElementById('applications-body').innerHTML = 
+                document.getElementById('applications-body').innerHTML =
                     `<tr><td colspan="5" class="text-center">Error loading applications: ${error.message}</td></tr>`;
             });
         }
 
         function displayApplications(applications) {
             const tbody = document.getElementById('applications-body');
-            
+
             if (applications.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="text-center">No applications yet. <a href="apply.html">Start one now</a></td></tr>';
                 return;
@@ -137,7 +158,7 @@
                 <tr>
                     <td>#${app.id}</td>
                     <td>${app.visa_type_name || 'Unknown'}</td>
-                    <td><span class="status-badge status-${app.status.toLowerCase()}">${app.status}</span></td>
+                    <td><span class="status-badge status-${app.status.toLowerCase().replace(/\s+/g, '-')}">${app.status}</span></td>
                     <td>${app.submitted_at ? new Date(app.submitted_at).toLocaleDateString() : 'N/A'}</td>
                     <td>
                         <a href="status.html?id=${app.id}" class="btn btn-small">View</a>
